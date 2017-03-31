@@ -127,12 +127,20 @@ Now we'll show how to call a function that takes arguments.
 >>> mm.meta_function("analysis_functions.set_variables_attr, 
                            args=("obj", 1, "age"))
 >>> mm.meta_function("analysis_functions.solve")
+Optimize a model with 152 rows, 1939 columns and 8706 nonzeros
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+02]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [0e+00, 0e+00]
+  RHS range        [1e+00, 1e+01]
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    5.4000000e+32   9.131251e+32   5.400000e+02      0s
+     202    3.7500000e+02   0.000000e+00   0.000000e+00      0s
 
+Solved in 202 iterations and 0.00 seconds
+Optimal objective  3.750000000e+02
 
-
-
-
-Snapshot saved as forest_30032017_2.json
+Snapshot saved as forest_2017330_2.json
 ```
 
 This example shows how to call a function that requires arguments. Note that keyword arguments could be passed in a similar fashion.
@@ -141,7 +149,7 @@ Let's say that we come back tomorrow and want to pick up where we left off.
 
 ```python
 >>> from meta_model import MetaModel
->>> mm = MetaModel(json_file="forest30032017_2.json")
+>>> mm = MetaModel(json_file="forest_2017330_2.json")
 >>> print mm.description
 Maximize Ecosystem condition
 >>> mm.meta_function("analysis_functions.solve")
