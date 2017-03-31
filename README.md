@@ -76,12 +76,12 @@ Iteration    Objective       Primal Inf.    Dual Inf.      Time
 Solved in 20 iterations and 0.08 seconds
 Optimal objective  4.072470571e+04
 
-Snapshot saved as forest_30032017_0.json
+Snapshot saved as forest_2017330_0.json
 ```
 
 When we called ```meta_function("analysis_functions.solve")``` a few things happened. First the MetaModel looked to see that *analysis_functions* is one of its modules, and that *solve* is a function of *analysis_functions*. Then it passes the MetaModel to *analysis_functions.solve*, and *solve* operates on the MetaModel.
 
-You'll notice that at the end of the optimization ```Snapshot saved as forest_30032017_0.json``` was printed to screen. This just means that *analysis_functions.solve* calls the MetaModel's *snapshot* method, which serializes the current state of the model for easy recreating in the future. The serialized model state is stored at *forest_30032017_0.json*. This name isn't as intimidating as it looks. It's just the name of the model, concatenated with today's date, and the version of the model that's being serialized, in this case 0.
+You'll notice that at the end of the optimization ```Snapshot saved as forest_2017330_0.json``` was printed to screen. This just means that *analysis_functions.solve* calls the MetaModel's *snapshot* method, which serializes the current state of the model for easy recreating in the future. The serialized model state is stored at *forest_30032017_0.json*. This name isn't as intimidating as it looks. It's just the name of the model, concatenated with today's date, and the version of the model that's being serialized, in this case 0.
 
 Now we'll make changes to the model and solve it again.
 
@@ -108,7 +108,7 @@ Iteration    Objective       Primal Inf.    Dual Inf.      Time
 Solved in 7 iterations and 0.00 seconds
 Optimal objective  3.802577891e+04
 
-Snapshot saved as forest_30032017_1.json
+Snapshot saved as forest_2017330_1.json
 ```
 
 Here when we passed *analysis_functions.remove_last_period* to the MetaModel, the function was applied to the MetaModel, reducing the length of the planning horizon from 10 periods to 9 periods, and then a record of the function being applied was stored to the MetaModel. This means that when we called *solve* and a snapshot was taken, a record of *analysis_functions.remove_last_period* was stored in *forest_30032017_1.json*.
@@ -155,7 +155,7 @@ Maximize Ecosystem condition
 >>> mm.meta_function("analysis_functions.solve")
 
 
-Snapshot saved as forest_31032017_0.json
+Snapshot saved as forest_2017331_3.json
 ```
 
 And you see that we're exactly where we left off. When we passed the snapshot location to the MetaModel constructor, the original Gurobi model was loaded into the MetaModel, and the functions that we had applied to the model were applied again in the proper order, so that we've recovered exactly the model state from yesterday.
