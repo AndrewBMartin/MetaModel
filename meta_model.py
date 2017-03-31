@@ -1,7 +1,9 @@
 """
 16 March 2017
 
-Splitting the meta model into something more generic.
+MetaModel design pattern.
+A wrapper on a Gurobi model that allows you to automate
+taking snapshots of the state of the model and logging results.
 """
 
 import os
@@ -9,8 +11,7 @@ import importlib
 import json
 from datetime import datetime
 
-import pygurobi as pg
-
+import gurobipy as gp
 
 class MetaModel(object):
     """
@@ -22,12 +23,12 @@ class MetaModel(object):
     Keep track of modifications made to a model and provide functionality to
     take snapshots of the model state.
 
-    If you want to call functions on a MetaModel that belong to a separate
-    module, the module must be added explicitly with the
+    To call a function with meta_function the module to which it belongs
+    must be added explicitly to the MetaModel with the 
     "add_module" or "add_modules" functions.
     """
 
-    def __init__(self, model_name="", model="", json_file="", module_names=[]):
+    def __init__(self, model_name="", model="", snapshot="", module_names=[]):
         """
         Constructor that can take either a model_name (including file extension)
         or a json_file location to a create MetaModel object.
@@ -39,12 +40,12 @@ class MetaModel(object):
         modules can be passed to the constructor as a list of strings using the
         module_names argument.
 
-        If a json_file is specified then a MetaModel is recreated from an earlier
-        snapshot.
+        If a snapshot is specified then a MetaModel is recreated from 
+        the supplied json file.
         """
 
-        if json_file:
-            self.load_from_json()
+        if snapshot:
+            self.load_from_snapshot(snapshot)
             return
 
         if not model_name:
@@ -52,7 +53,7 @@ class MetaModel(object):
         self.model_name = model_name
         self.model = model
         if not model:
-            self.model = pg.read_model(model_name)
+            self.model = gp.read(model_name)
         self.date_created = datetime.now()
         self.model_description = ""
         self.solve_count = 0
@@ -63,14 +64,9 @@ class MetaModel(object):
         self.function_list = []
 
         self.json_file = ""
-        filename, file_extension = os.path.splitext(self.model_name)
-        self.filename = "{0}_{1}_{2}".format(
-                filename,
-                "{0}{1}{2}".format(self.date_created.year, self.date_created.month,
-                    self.date_created.day), 
-                self.solve_count)
+        self.update_filename()
         self.module_names = module_names
-        self.modules = []
+        self.modules = {}
         if self.module_names:
             self.add_modules(self.module_names)
 
@@ -103,11 +99,15 @@ class MetaModel(object):
         # namespace collisions. It's expected that users will know
         # their libraries well however, so they may prefer to simply pass
         # function names.
-        if "." in func_name and func_name.split(".")[0] != "self":
+        if "." in func_name:
             module, func_name = func_name.split(".")
 
-            for mod in self.modules:
-                if mod.__name__ == module:
+            if module not in self.module_names:
+                raise ValueError("Module {0} has not been added".format(
+                    module))
+
+            for name, mod in self.modules.iteritems():
+                if name == module:
                     try:
                         func = getattr(mod, func_name)
                     except KeyError:
@@ -116,17 +116,6 @@ class MetaModel(object):
                 raise KeyError(
                         "Function {0} was not found in module {1}".format(
                             func_name, module))
-
-
-            
-        elif "." in func_name and func_name.split(".")[0] == "self":
-            module, func_name = func_name.split(".")
-            try:
-                func = getattr(self, func_name)
-            except KeyError:
-                raise KeyError(
-                        "Function {0} was not found on the object {1}".format(
-                            func_name, self))
         else:
 
             # No module identifier provided. 
@@ -134,7 +123,7 @@ class MetaModel(object):
             # This form is discouraged unless you know the modules that
             # you're working with well enough to avoid accidentally calling
             # a function with the same name from the wrong module.
-            for module in self.modules:
+            for module in self.modules.values():
                 try:
                     func = getattr(module, func_name)
                 except KeyError:
@@ -147,26 +136,18 @@ class MetaModel(object):
                     raise KeyError('Function "{0}" was not found'.format(func_name))
 
         try:
-            return_value = func(self, *args, **kwargs)
-            return return_value
+            func(self, *args, **kwargs)
         except ValueError:
             # This is probably because the number of arguments given to func is wrong
             raise
         
         # When recreating a MetaModel from json we want to be able to
         # call meta_function without having those calls recorded on the object.
-        if not no_record:
+        if not no_record and "solve" not in func_name:
             self.function_list.append((func_name, args, kwargs))
-    
 
-    def add_module(self, module_name):
-        """
-        Add a module to the meta model to access it's functions
-        from meta functions.
 
-        A module is passed as a string representing the name of the module.
-        """
-
+    def get_module(self, module_name):
         module = ""
         try:
             module = importlib.import_module(module_name)
@@ -177,8 +158,22 @@ class MetaModel(object):
             # module_name likely empty string
             raise
 
+        return module
+
+    
+
+    def add_module(self, module_name):
+        """
+        Add a module to the meta model to access it's functions
+        from meta functions.
+
+        A module is passed as a string representing the name of the module.
+        """
+
+        module = self.get_module(module_name)
+
         if module:
-            self.modules.append(module)
+            self.modules[module_name] = module
             self.module_names.append(module_name)
 
 
@@ -186,11 +181,27 @@ class MetaModel(object):
         """
         Add multiple modules by passing a list of strings representing modules.
         """
+        print modules
+        print len(modules)
+        
+        # 31 March 2017 - this is very strange.
+        # If I iterate over modules then this loop will go
+        # on forever even though above len(modules) returns 
+        # the accurate length of the modules list which should
+        # be very tractable. This work around achieves the desired
+        # behaviour for now.
+        for i in range(len(modules)):
+            self.add_module(modules[i])
 
-        for module_name in modules:
+
+    def reload_module(self, module_name):
+        
+        if module_name not in self.module_names:
             self.add_module(module_name)
+        else:
+            reload(self.modules[module_name])
 
-            
+    
     def load_json(self, json_file): 
         """
         Read in a json file representing a MetaModel.
@@ -205,18 +216,26 @@ class MetaModel(object):
         return data
 
 
-    def load_from_json(self):
+    def load_from_snapshot(self, snapshot):
         """
         Load MetaModel from json file. Then add any modules that MetaModel
         requires and apply functions given by the MetaModel's function_list.
         """
 
-        data = self.load_json(json_file)
+        data = self.load_json(snapshot)
         for key in data:
             setattr(self, key.lower(), data[key])
-        self.model = pg.read_model(self.model_name)
+
+        # This is a Gurobi specific step.
+        # If reading a model from another service, please replace this line.
+        self.model = gp.read(self.model_name)
         
         self.add_modules(self.module_names)
+
+        # Increment the solve count and update the filename
+        # so we don't overwrite the current snapshot.
+        self.solve_count += 1
+        self.update_filename()
      
         for function, args, kwargs in self.function_list:
             self.meta_function(function, args, kwargs, no_record=True)
@@ -237,7 +256,7 @@ class MetaModel(object):
                 self.solve_count)
 
 
-    def write_json(self):
+    def take_snapshot(self):
         """
         Serialize a MetaModel as a json object located at self.filename.
 
@@ -251,11 +270,13 @@ class MetaModel(object):
 
             # The following keys are not json serializable
             if key == "model":
+                data[key] = ""
                 continue
             if key == "date_created":
                 data[key] = str(getattr(self, key))
                 continue
             if key == "modules":
+                data[key] = {}
                 continue
 
             data[key] = getattr(self, key)
@@ -288,55 +309,3 @@ class MetaModel(object):
 
 
 
-    def set_attr(self, attr, value):
-        """
-        Providing MetaModel access to the Gurobi setAttr method.
-        """
-
-        try:
-            setattr(self.model, attr, value)
-        except AttributeError:
-            raise AttributeError('Attribute "{0}" does not exist'.format(attr))
-
-        self.function_list.append("self.set_attr", (attr, value))
-
-
-    def get_attr(self, attr):
-        """
-        Providing MetaModel access ot the Gurobi getAttr method.
-        
-        This function does not modify the model object so is not recorded
-        by meta_function
-        """
-
-        try:
-            val = getattr(self.model, attr)
-            return val
-        except AttributeError:
-            raise AttributeError('Attribute "{0}" does not exist'.format(attr))
-
-
-    def set_param(self, param, value):
-        """
-        Providing MetaModel access to the Gurobi setParam method.
-        """
-        try:
-            self.model.setParam(param, value)
-        except AttributeError:
-            raise AttributeError('Parameter "{0}" does not exist'.format(attr))
-
-        self.function_list.append("self.set_param", (param, value))
-
-
-    def get_param(self, param):
-        """
-        Providing MetaModel access ot the Gurobi getParam method.
-        
-        This function does not modify the model object so is not recorded
-        by meta_function
-        """
-        
-        try:
-            self.model.getParam(param, value)
-        except AttributeError:
-            raise AttributeError('Parameter "{0}" does not exist'.format(attr))
