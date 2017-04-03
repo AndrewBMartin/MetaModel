@@ -2,17 +2,17 @@
 
 
 
-MetaModel is a powerful design pattern that allows Operational Researchers to analyze models without worrying about manually logging progress and results.
+MetaModel is a powerful design pattern that makes Gurobi modelling more efficient because it allows Operational Researchers to analyze models without worrying about manually logging progress and results.
 
   - Easily take snapshots of the state of your model at any time
   - Recreate any state of your model without having to store multiple versions of the  model
-  - Works with any optimization solver that exposes an API
+  - Design pattern works with any optimization solver that exposes an API
 
 ## What is a MetaModel?
 
-MetaModels came out of years working interactively with very large optimization models. These models were so large that it was prohibitively expensive to store multiple versions of the model anywhere. At the same time, these models took a very long time to generate. That is, it was much more efficient to generate a base model and then make changes to it interactively than it was to generate different models for each experiment. 
+MetaModels came out of years working interactively with very large optimization models. These models were so large that it was prohibitively expensive to store multiple versions of the model anywhere. At the same time, these models took a very long time to generate. That is, it was much more efficient to generate a base model and then make changes to it interactively than it was to generate different models for each experiment. This means that I spent a lot of time analyzing and scripting in my Python interpreter.
 
-A MetaModel is a thin object wrapper around an optimization model. It has a constructor that takes an optimization model as it's main argument, and a few simple methods. It works as follows. First you add modules to the MetaModel using *add modules*, you then can call functions contained in those modules by calling *meta function* on your MetaModel and passing the function name. A *meta function* allows you to perform operations on your model before or after applying a function to it. Namely, the function can be logged on the MetaModel, or a snapshot can be taken of the current model state and the functions that have been applied to it. These snapshots can then be used to recreate the current model state quickly and inexpensively.
+A MetaModel is a thin object wrapper around an optimization model. It has a constructor that takes an optimization model as it's main argument, and a few simple methods. These methods allow you to add modules to your MetaModel, apply functions to your MetaModel, and store/load snapshots of your MetaModel. I use MetaModels now in my daily work because they make my workflow more efficient.
 
 ### Example
 The example I'm going to show you is in Python using a Gurobi model. Find it in the meta_model directory as [forest.lp](https://github.com/AndrewBMartin/pygurobi/blob/master/pygurobi/forest.lp). 
@@ -45,19 +45,19 @@ The constraints are:
 >>> mm = MetaModel("forest.lp")
 ```
 
-Now there are some simple modifications that we want to perform on *forest.lp* so I've created a small Python module containing functions to perform those modifications. This modules is *analysis_functions.py*.
+Now there are some simple modifications that we want to perform on *forest.lp* so I've created a small Python module containing functions to perform those modifications. This modules is called *analysis_functions.py*.
 
 ```python
 >>> # We'll add the analysis_functions module to the MetaModel
 >>> mm.add_module("analysis_functions")
 >>>
 >>> # adding a description to a MetaModel makes it easy 
->>> # to organize snapshots down the line.
+>>> # to organize snapshots.
 >>> mm.description = "Baseline model"
->>>
+>>> 
+>>> # First we solve the model to establish a baseline.
 >>> # We call a function from the analysis_functions module by passing
 >>> # the module name and function name to the meta_function.
->>> # First we solve the model to establish a baseline.
 >>> mm.meta_function("analysis_functions.solve")
 Optimize a model with 160 rows, 1945 columns and 10172 nonzeros
 Coefficient statistics:
@@ -81,7 +81,9 @@ Snapshot saved as forest_2017330_0.json
 
 When we called ```meta_function("analysis_functions.solve")``` a few things happened. First the MetaModel looked to see that *analysis_functions* is one of its modules, and that *solve* is a function of *analysis_functions*. Then it passes the MetaModel to *analysis_functions.solve*, and *solve* operates on the MetaModel.
 
-You'll notice that at the end of the optimization ```Snapshot saved as forest_2017330_0.json``` was printed to screen. This just means that *analysis_functions.solve* calls the MetaModel's *snapshot* method, which serializes the current state of the model for easy recreating in the future. The serialized model state is stored at *forest_30032017_0.json*. This name isn't as intimidating as it looks. It's just the name of the model, concatenated with today's date, and the version of the model that's being serialized, in this case 0.
+You'll notice that at the end of the optimization ```Snapshot saved as forest_2017330_0.json``` was printed to screen. This means that *analysis_functions.solve* calls the MetaModel's *take_snapshot* method, which serializes the current state of the model for easy recreating in the future. The serialized model state is stored at *forest_2017330_0.json*. This name isn't as intimidating as it looks. It's just the name of the model, concatenated with today's date, and the version of the model that's being serialized, in this case 0.
+
+The ```analysis_functions.solve``` function that I've written also writes variable solution values to a csv file, ```forest_2017330_0_sol.csv```. This enables us to go back to solutions later and analyze them using Excel without having to load a MetaModel.
 
 Now we'll make changes to the model and solve it again.
 
@@ -111,7 +113,7 @@ Optimal objective  3.802577891e+04
 Snapshot saved as forest_2017330_1.json
 ```
 
-Here when we passed *analysis_functions.remove_last_period* to the MetaModel, the function was applied to the MetaModel, reducing the length of the planning horizon from 10 periods to 9 periods, and then a record of the function being applied was stored to the MetaModel. This means that when we called *solve* and a snapshot was taken, a record of *analysis_functions.remove_last_period* was stored in *forest_30032017_1.json*.
+Here when we passed *analysis_functions.remove_last_period* to the MetaModel, the function was applied to the MetaModel, reducing the length of the planning horizon from 10 periods to 9 periods, and then a record of the function being applied was stored to the MetaModel. This means that when we called *solve* and a snapshot was taken, a record of *analysis_functions.remove_last_period* was stored in *forest_2017330_1.json*.
 
 Now we'll show how to call a function that takes arguments.
 
@@ -143,7 +145,7 @@ Optimal objective  3.750000000e+02
 Snapshot saved as forest_2017330_2.json
 ```
 
-This example shows how to call a function that requires arguments. Note that keyword arguments could be passed in a similar fashion.
+Here we changed the objective function of the model from maximize harvest volume to maximize the amount of old forest. We did this by first zeroing all the objective coefficients and then calling ```analysis_functions.set_variables_attr```and passing it the arguments "obj", 1, and "age". Functions called with ```meta_function``` must have JSON serializable arguments. Note that keyword arguments could be passed in a similar fashion by using the kwargs parameter.
 
 Let's say that we come back tomorrow and want to pick up where we left off.
 
@@ -153,12 +155,26 @@ Let's say that we come back tomorrow and want to pick up where we left off.
 >>> print mm.description
 Maximize Ecosystem condition
 >>> mm.meta_function("analysis_functions.solve")
+Optimize a model with 152 rows, 1939 columns and 8706 nonzeros
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+02]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [0e+00, 0e+00]
+  RHS range        [1e+00, 1e+01]
+Presolve removed 44 rows and 1394 columns
+Presolve time: 0.00s
+Presolved: 108 rows, 545 columns, 1658 nonzeros
 
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    1.1141210e+03   2.035147e+03   0.000000e+00      0s
+     112    3.7500000e+02   0.000000e+00   0.000000e+00      0s
+
+Solved in 112 iterations and 0.00 seconds
+Optimal objective  3.750000000e+02
 
 Snapshot saved as forest_2017331_3.json
 ```
 
 And you see that we're exactly where we left off. When we passed the snapshot location to the MetaModel constructor, the original Gurobi model was loaded into the MetaModel, and the functions that we had applied to the model were applied again in the proper order, so that we've recovered exactly the model state from yesterday.
 
-
-
+This tutorial has provided an introduction to the MetaModel design pattern. It has shown how to create, modify, and load a MetaModel. MetaModels can make Gurobi modelling more efficient because the modeller can focus on anlaysis instead of tracking and logging their progress.

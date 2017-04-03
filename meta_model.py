@@ -22,16 +22,12 @@ class MetaModel(object):
 
     Keep track of modifications made to a model and provide functionality to
     take snapshots of the model state.
-
-    To call a function with meta_function the module to which it belongs
-    must be added explicitly to the MetaModel with the 
-    "add_module" or "add_modules" functions.
     """
 
     def __init__(self, model_name="", model="", snapshot="", module_names=[]):
         """
         Constructor that can take either a model_name (including file extension)
-        or a json_file location to a create MetaModel object.
+        or a snapshot json location to a create MetaModel object.
 
         If model_name provided then can also pass a model object to save the
         MetaModel from having to read in the model. 
@@ -49,7 +45,7 @@ class MetaModel(object):
             return
 
         if not model_name:
-            raise AttributeError('A model file name must be supplied')
+            raise AttributeError('A model file name or a snap shot must be supplied')
         self.model_name = model_name
         self.model = model
         if not model:
@@ -59,11 +55,11 @@ class MetaModel(object):
         self.solve_count = 0
         self.optimal = False
 
-        # Store an ordered list of tuples of the functions and their arguments
+        # Store an list of tuples of the functions, their args, and their kwargs
         # that have been applied to the model
         self.function_list = []
 
-        self.json_file = ""
+        self.snapshot = ""
         self.update_filename()
         self.module_names = module_names
         self.modules = {}
@@ -76,17 +72,22 @@ class MetaModel(object):
         Call the supplied function given by func_name on the meta_model object.
 
         Provide args as a tuple the function should take the arguments in 
-        the order they're provided (named arguments might be better).
+        the order they're provided (named arguments might be better). Can
+        also specify a dictionary of kwargs.
 
         Pass no_record = True if you don't want the operation recorded in 
         the meta models' function list. 
 
         Note that functions supplied to meta_function must follow a strict
-        format. Namely, their first argument must be a Gurobi model object.
-        The arguments given by args must be in the order that they should
-        be passed to the function being called.
+        format. Namely, their first argument must be a MetaModel. Arguments
+        and kwargs follow.
 
         Arguments to functions must be json serializable.
+
+        3 April 2017 - meta_functions are not perpared for calling methods
+        contained in modules of modules. That is, if you have a module, 
+        called top_level, containing a module, called mid_level, then you
+        can't call top_level.mid_level.function.
         """
 
         func = ""
@@ -181,9 +182,7 @@ class MetaModel(object):
         """
         Add multiple modules by passing a list of strings representing modules.
         """
-        print modules
-        print len(modules)
-        
+
         # 31 March 2017 - this is very strange.
         # If I iterate over modules then this loop will go
         # on forever even though above len(modules) returns 
@@ -195,6 +194,10 @@ class MetaModel(object):
 
 
     def reload_module(self, module_name):
+        """
+        Reload a module that has already been added to the MetaModel.
+        If the module has not been added, then add it.
+        """
         
         if module_name not in self.module_names:
             self.add_module(module_name)
@@ -218,8 +221,7 @@ class MetaModel(object):
 
     def load_from_snapshot(self, snapshot):
         """
-        Load MetaModel from json file. Then add any modules that MetaModel
-        requires and apply functions given by the MetaModel's function_list.
+        Load MetaModel from a json of a snapshot.
         """
 
         data = self.load_json(snapshot)
@@ -281,31 +283,8 @@ class MetaModel(object):
 
             data[key] = getattr(self, key)
 
-        self.json_file = "{0}.json".format(self.filename)
-        data["json_file"] = self.json_file
+        self.snapshot = "{0}.json".format(self.filename)
+        data["json_file"] = self.snapshot
 
-        json.dump(data, open(self.json_file, "w+"))
-
-
-    def solve(self):
-        """
-        Example of how to take a model snapshot when solving a Gurobi model.
-        """
-        m = self.model
-        pg.reoptimize(m)
-        if m.status == gp.GRB.status.OPTIMAL:
-            self.solve_count += 1
-            self.optimal = True
-
-            # May want to have a script here to save useful information.
-
-            self.write_json()
-            self.update_filename()
-        else:
-            self.optimal = False
-            self.solve_count += 1
-            self.write_json()
-
-
-
+        json.dump(data, open(self.snapshot, "w+"))
 

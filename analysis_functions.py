@@ -3,6 +3,7 @@ analysis_functions.py
 
 Functions to modify forest.lp for the MetaModels example.
 """
+import csv
 
 import gurobipy as gp
 import pygurobi as pg
@@ -21,15 +22,17 @@ def solve(mm):
     model = mm.model
     model.optimize()
 
-    if model.status == gp.GRB.OPTIMAL:
-        # Could have a function here to log solution data
-        pass
 
     mm.optimal = model.status
     mm.take_snapshot()
     print "\nSnapshot saved as {}".format(mm.filename)
     mm.solve_count += 1
     mm.update_filename()
+
+    if model.status == gp.GRB.OPTIMAL:
+        # Write a csv of the solution data
+        write_solution(mm)
+
 
     return True
 
@@ -67,6 +70,48 @@ def set_variables_attr(mm, attr, val, name):
     mm.model.update()
 
 
+def write_solution(mm):
+    """
+    Write solution values for harv and age variables
+    to a csv file.
+    """
+
+    m = mm.model
+
+    solution_file = "{0}_sol.csv".format(mm.filename)
+
+    harv_data = []
+    harv_data.append(["Harvest data"])
+    harv_data.append(["Species", "Region", "Period", "Value"])
+    # write harv variable solution values
+    harv = pg.get_variables(m, "harv")
+    for h in harv:
+        name = h.varName.split(",")
+        species = name[0].split("[")[1]
+        region = name[1]
+        period = name[-1][:-1]
+        harv_data.append(
+                [species, region, period, h.X])
+
+    age_data = []
+    age_data.append(["Age data"])
+    age_data.append(["Region", "Period", "Value"])
+    age = pg.get_variables(m, "age")
+    for a in age:
+        name = a.varName.split(",")
+        region = name[0].split("[")[1]
+        period = name[-1][:-1]
+        age_data.append(
+                [region, period, a.X])
+
+    with open(solution_file, "w+") as wrf:
+        wf = csv.writer(wrf)
+        wf.writerows(harv_data)
+        wf.writerows(age_data)
+
+
+
+
 def test_tutorial():
 
     mm = MetaModel("forest.lp")
@@ -81,7 +126,11 @@ def test_tutorial():
             args=("obj", 1, "age"))
     mm.meta_function("analysis_functions.solve")
 
-    mm = MetaModel(snapshot="forest_2017331_2.json")
+    location = mm.snapshot
+
+    mm = MetaModel(snapshot=location)
+    mm.meta_function("analysis_functions.solve")
+
     return mm
 
 
