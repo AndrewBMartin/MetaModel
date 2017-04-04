@@ -6,7 +6,7 @@ MetaModel is a powerful design pattern that makes Gurobi modelling more efficien
 
   - Easily take snapshots of the state of your model at any time
   - Recreate any state of your model without having to store multiple versions of the  model
-  - Design pattern works with any optimization solver that exposes an API
+  - Works with any optimization solver that exposes an API
 
 ## What is a MetaModel?
 
@@ -15,9 +15,9 @@ MetaModels came out of years working interactively with very large optimization 
 A MetaModel is a thin object wrapper around an optimization model. It has a constructor that takes an optimization model as it's main argument, and a few simple methods. These methods allow you to add modules to your MetaModel, apply functions to your MetaModel, and store/load snapshots of your MetaModel. I use MetaModels now in my daily work because they make my workflow more efficient.
 
 ### Example
-The example I'm going to show you is in Python using a Gurobi model. Find it in the meta_model directory as [forest.lp](https://github.com/AndrewBMartin/pygurobi/blob/master/pygurobi/forest.lp). 
+The example I'm going to show you is in Python using a Gurobi model. Find it in the meta_model directory as [forest.lp](https://github.com/AndrewBMartin/meta_model/blob/master/forest.lp). 
 
-[forest.lp](https://github.com/AndrewBMartin/pygurobi/blob/master/pygurobi/forest.lp) is a harvest scheduling model that seeks the optimal assignment of harvest schedules to cut-blocks. Our forest management model will run for 10 periods with each period representing 10 years. 
+[forest.lp](https://github.com/AndrewBMartin/meta_model/blob/master/forest.lp) is a harvest scheduling model that seeks the optimal assignment of harvest schedules to cut-blocks. Our forest management model will run for 10 periods with each period representing 10 years. 
 
 The objective is to **maximize the total volume of timber harvested**.
 
@@ -45,7 +45,7 @@ The constraints are:
 >>> mm = MetaModel("forest.lp")
 ```
 
-Now there are some simple modifications that we want to perform on *forest.lp* so I've created a small Python module containing functions to perform those modifications. This modules is called *analysis_functions.py*.
+Now there are some simple modifications that we want to perform on *forest.lp* so I've created a small Python module containing functions to perform those modifications. This module is called [*analysis_functions.py*](https://github.com/AndrewBMartin/meta_model/blob/master/analysis_functions.py).
 
 ```python
 >>> # We'll add the analysis_functions module to the MetaModel
@@ -175,6 +175,6 @@ Optimal objective  3.750000000e+02
 Snapshot saved as forest_2017331_3.json
 ```
 
-And you see that we're exactly where we left off. When we passed the snapshot location to the MetaModel constructor, the original Gurobi model was loaded into the MetaModel, and the functions that we had applied to the model were applied again in the proper order, so that we've recovered exactly the model state from yesterday.
+And we're exactly where we left off yesterday. When we passed the snapshot location to the MetaModel constructor, the original Gurobi model was loaded into the MetaModel, and the functions that we had applied to the model were applied again in the proper order, so that we've recovered exactly the model state from yesterday.
 
 This tutorial has provided an introduction to the MetaModel design pattern. It has shown how to create, modify, and load a MetaModel. MetaModels can make Gurobi modelling more efficient because the modeller can focus on anlaysis instead of tracking and logging their progress.
